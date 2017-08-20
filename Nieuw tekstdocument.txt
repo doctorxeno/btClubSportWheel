@@ -1,0 +1,218 @@
+1 TARGETPATH = firmware 
+2 
+ 
+3 # The teensy version to use, 30, 31, or LC 
+4 TEENSY = LC
+5 
+ 
+6 # Device type: USB (wired) or BT (bluetooth) 
+7 TYPE = USB 
+8 
+ 
+9 # Set to 24000000, 48000000, or 96000000 to set CPU core speed 
+10 TEENSY_CORE_SPEED = 48000000 
+11 
+ 
+12 # Some libraries will require this to be defined 
+13 # If you define this, you will break the default main.cpp 
+14 ARDUINO = 10600 
+15 
+ 
+16 # configurable options 
+17 OPTIONS = -DLAYOUT_US_ENGLISH 
+18 
+ 
+19 # directory to build in 
+20 BUILDDIR = $(abspath $(CURDIR)/build) 
+21 
+ 
+22 
+ 
+23 ifeq ($(TYPE), USB) 
+24 	OPTIONS += -DIS_USB 
+25 else 
+26 	ifeq ($(TYPE), BT_DEBUG) 
+27 		OPTIONS += -DHAS_DEBUG 
+28 	endif 
+29 	ifeq ($(TYPE), BT) 
+30 		OPTIONS += -DUSB_DISABLED 
+31 	endif 
+32 endif 
+33 
+ 
+34 # The name of your project (used to name the compiled .hex file) 
+35 TARGET = csw.teensy$(TEENSY)_$(TYPE) 
+36 
+ 
+37 #************************************************************************ 
+38 # Location of Teensyduino utilities, Toolchain, and Arduino Libraries. 
+39 # To use this makefile without Arduino, copy the resources from these 
+40 # locations and edit the pathnames.  The rest of Arduino is not needed. 
+41 #************************************************************************ 
+42 
+ 
+43 # path location for Teensy Loader, teensy_post_compile and teensy_reboot 
+44 TOOLSPATH = $(CURDIR)/tools 
+45 
+ 
+46 ifeq ($(OS),Windows_NT) 
+47     $(error What is Win Dose?) 
+48 else 
+49     UNAME_S := $(shell uname -s) 
+50     ifeq ($(UNAME_S),Darwin) 
+51         TOOLSPATH = /Applications/Arduino.app/Contents/Java/hardware/tools/ 
+52     endif 
+53 endif 
+54 
+ 
+55 # path location for Teensy 3 core 
+56 COREPATH = teensy3 
+57 
+ 
+58 # path location for Arduino libraries 
+59 LIBRARYPATH = libraries 
+60 
+ 
+61 # path location for the arm-none-eabi compiler 
+62 COMPILERPATH = $(TOOLSPATH)/arm/bin 
+63 
+ 
+64 #************************************************************************ 
+65 # Settings below this point usually do not need to be edited 
+66 #************************************************************************ 
+67 
+ 
+68 # CPPFLAGS = compiler options for C and C++ 
+69 CPPFLAGS = -Wall -g -Os -mthumb -ffunction-sections -fdata-sections -nostdlib -MMD $(OPTIONS) -DTEENSYDUINO=124 -DF_CPU=$(TEENSY_CORE_SPEED) -Isrc -I$(COREPATH) 
+70 
+ 
+71 # compiler options for C++ only 
+72 CXXFLAGS = -std=gnu++0x -felide-constructors -fno-exceptions -fno-rtti 
+73 
+ 
+74 # compiler options for C only 
+75 CFLAGS = 
+76 
+ 
+77 # linker options 
+78 UNIX_TIME = $(shell date '+%s') 
+79 LDFLAGS = -Os -Wl,--gc-sections,--defsym=__rtc_localtime=$(UNIX_TIME) -mthumb 
+80 
+ 
+81 # additional libraries to link 
+82 LIBS = -lm 
+83 
+ 
+84 # compiler options specific to teensy version 
+85 ifeq ($(TEENSY), 30) 
+86     CPPFLAGS += -D__MK20DX128__ -mcpu=cortex-m4 
+87     LDSCRIPT = $(COREPATH)/mk20dx128.ld 
+88     LDFLAGS += -mcpu=cortex-m4 -T$(LDSCRIPT) 
+89 else 
+90     ifeq ($(TEENSY), 31) 
+91         CPPFLAGS += -D__MK20DX256__ -mcpu=cortex-m4 
+92         LDSCRIPT = $(COREPATH)/mk20dx256.ld 
+93         LDFLAGS += -mcpu=cortex-m4 -T$(LDSCRIPT) 
+94     else 
+95         ifeq ($(TEENSY), LC) 
+96             CPPFLAGS += -D__MKL26Z64__ -mcpu=cortex-m0plus 
+97             LDSCRIPT = $(COREPATH)/mkl26z64.ld 
+98             LDFLAGS += -mcpu=cortex-m0plus -T$(LDSCRIPT) 
+99             LIBS += -larm_cortexM0l_math 
+100         else 
+101             $(error Invalid setting for TEENSY) 
+102         endif 
+103     endif 
+104 endif 
+105 
+ 
+106 # set arduino define if given 
+107 ifdef ARDUINO 
+108 	CPPFLAGS += -DARDUINO=$(ARDUINO) 
+109 else 
+110 	CPPFLAGS += -DUSING_MAKEFILE 
+111 endif 
+112 
+ 
+113 # names for the compiler programs 
+114 CC = $(abspath $(COMPILERPATH))/arm-none-eabi-gcc 
+115 CXX = $(abspath $(COMPILERPATH))/arm-none-eabi-g++ 
+116 OBJCOPY = $(abspath $(COMPILERPATH))/arm-none-eabi-objcopy 
+117 SIZE = $(abspath $(COMPILERPATH))/arm-none-eabi-size 
+118 
+ 
+119 # automatically create lists of the sources and objects 
+120 LC_FILES := $(wildcard $(LIBRARYPATH)/*/*.c) 
+121 LCPP_FILES := $(wildcard $(LIBRARYPATH)/*/*.cpp) 
+122 TC_FILES := $(wildcard $(COREPATH)/*.c) 
+123 TCPP_FILES := $(wildcard $(COREPATH)/*.cpp) 
+124 C_FILES := $(wildcard src/*.c) 
+125 CPP_FILES := $(wildcard src/*.cpp) 
+126 INO_FILES := $(wildcard src/*.ino) 
+127 
+ 
+128 # include paths for libraries 
+129 L_INC := $(foreach lib,$(filter %/, $(wildcard $(LIBRARYPATH)/*/)), -I$(lib)) 
+130 
+ 
+131 SOURCES := $(C_FILES:.c=.o) $(CPP_FILES:.cpp=.o) $(INO_FILES:.ino=.o) $(TC_FILES:.c=.o) $(TCPP_FILES:.cpp=.o) $(LC_FILES:.c=.o) $(LCPP_FILES:.cpp=.o) 
+132 OBJS := $(foreach src,$(SOURCES), $(BUILDDIR)/$(src)) 
+133 
+ 
+134 all: hex 
+135 
+ 
+136 build: $(TARGET).elf 
+137 
+ 
+138 hex: $(TARGETPATH)/$(TARGET).hex 
+139 
+ 
+140 post_compile: $(TARGETPATH)/$(TARGET).hex 
+141 	@$(abspath $(TOOLSPATH))/teensy_post_compile -file="$(basename $<)" -path=$(CURDIR) -tools="$(abspath $(TOOLSPATH))" 
+142 
+ 
+143 reboot: 
+144 	@-$(abspath $(TOOLSPATH))/teensy_reboot 
+145 
+ 
+146 upload: post_compile reboot 
+147 
+ 
+148 $(BUILDDIR)/%.o: %.c 
+149 	@echo "[CC]\t$<" 
+150 	@mkdir -p "$(dir $@)" 
+151 	@$(CC) $(CPPFLAGS) $(CFLAGS) $(L_INC) -o "$@" -c "$<" 
+152 
+ 
+153 $(BUILDDIR)/%.o: %.cpp 
+154 	@echo "[CXX]\t$<" 
+155 	@mkdir -p "$(dir $@)" 
+156 	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(L_INC) -o "$@" -c "$<" 
+157 
+ 
+158 $(BUILDDIR)/%.o: %.ino 
+159 	@echo "[CXX]\t$<" 
+160 	@mkdir -p "$(dir $@)" 
+161 	@$(CXX) $(CPPFLAGS) $(CXXFLAGS) $(L_INC) -o "$@" -x c++ -include Arduino.h -c "$<" 
+162 
+ 
+163 $(TARGET).elf: $(OBJS) $(LDSCRIPT) 
+164 	@echo "[LD]\t$@" 
+165 	@$(CC) $(LDFLAGS) -o "$@" $(OBJS) $(LIBS) 
+166 
+ 
+167 $(TARGETPATH)/%.hex: %.elf 
+168 	@echo "[HEX]\t$@" 
+169 	@$(SIZE) "$<" 
+170 	@$(OBJCOPY) -O ihex -R .eeprom "$<" "$@" 
+171 
+ 
+172 # compiler generated dependency info 
+173 -include $(OBJS:.o=.d) 
+174 
+ 
+175 clean: 
+176 	@echo Cleaning... 
+177 	@rm -rf "$(BUILDDIR)" 
+178 	@rm -f "$(TARGET).elf" "$(TARGETPATH)/$(TARGET).hex" 
